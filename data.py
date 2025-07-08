@@ -67,7 +67,7 @@ def download_S3DIS():
                 from https://goo.gl/forms/4SoGp4KtH1jfRqEj2 and place it under data/')
             sys.exit(0)
         else:
-            zippath = os.path.join(DATA_DIR, '..','..','data','Stanford3dDataset_v1.2_Aligned_Version.zip')
+            zippath = os.path.join(DATA_DIR, 'data','Stanford3dDataset_v1.2_Aligned_Version.zip')
             os.system('unzip %s' % (zippath))
             os.system('mv %s %s' % ('Stanford3dDataset_v1.2_Aligned_Version', DATA_DIR))
             os.system('rm %s' % (zippath))
