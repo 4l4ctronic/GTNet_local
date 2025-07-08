@@ -29,7 +29,7 @@ def download_modelnet40():
     DATA_DIR = BASE_DIR
     if not os.path.exists(DATA_DIR):
         os.mkdir(DATA_DIR)
-    if not os.path.exists(os.path.join(DATA_DIR,'..','..','data','modelnet40_ply_hdf5_2048')):
+    if not os.path.exists(os.path.join(DATA_DIR,'data','modelnet40_ply_hdf5_2048')):
         www = 'https://shapenet.cs.stanford.edu/media/modelnet40_ply_hdf5_2048.zip'
         zipfile = os.path.basename(www)
         os.system('wget %s --no-check-certificate; unzip %s' % (www, zipfile))
@@ -80,7 +80,7 @@ def load_data_cls(partition):
     DATA_DIR = BASE_DIR
     all_data = []
     all_label = []
-    for h5_name in glob.glob(os.path.join('D:\\datasets\\modelnet40_ply_hdf5_2048', '*%s*.h5'%partition)):
+    for h5_name in glob.glob(os.path.join('data/modelnet40_ply_hdf5_2048', '*%s*.h5'%partition)):
         f = h5py.File(h5_name, 'r+')
         data = f['data'][:].astype('float32')
         label = f['label'][:].astype('int64')
