@@ -457,7 +457,7 @@ if __name__ == '__main__':
     print(data.shape)
     print(label.shape)
 
-    trainval = ShapeNetPart(2048, 'trainval')
+"""     trainval = ShapeNetPart(2048, 'trainval')
     test = ShapeNetPart(2048, 'test')
     data, label, seg = trainval[0]
     print(data.shape)
@@ -470,4 +470,4 @@ if __name__ == '__main__':
     test=S3DIS(4096,'test')
     data, seg = train[0]
     print(data.shape)
-    print(seg.shape)
+    print(seg.shape) """
