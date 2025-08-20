@@ -42,7 +42,7 @@ def download_shapenetpart():
     DATA_DIR = BASE_DIR
     if not os.path.exists(DATA_DIR):
         os.mkdir(DATA_DIR)
-    if not os.path.exists('D:\\datasets\\shapenet_part_seg_hdf5_data'):
+    if not os.path.exists(os.path.join(DATA_DIR,'data','shapenet_part_seg_hdf5_data')):
         www = 'https://shapenet.cs.stanford.edu/media/shapenet_part_seg_hdf5_data.zip'
         zipfile = os.path.basename(www)
         os.system('wget %s --no-check-certificate; unzip %s' % (www, zipfile))
@@ -82,7 +82,7 @@ def load_data_cls(partition):
     all_label = []
     for h5_name in glob.glob(os.path.join('data/modelnet40_ply_hdf5_2048', '*%s*.h5'%partition)):
         f = h5py.File(h5_name, 'r+')
-        data = f['data'][:].astype('float32')
+        data = f['data'][:].astype('float32') 
         label = f['label'][:].astype('int64')
         f.close()
         all_data.append(data)
@@ -257,7 +257,7 @@ def load_color_semseg():
             break  
     
 
-def translate_pointcloud(pointcloud):
+def translate_pointcloud(pointcloud):#对点云进行随机的缩放和平移变换：
     xyz1 = np.random.uniform(low=2./3., high=3./2., size=[3])
     xyz2 = np.random.uniform(low=-0.2, high=0.2, size=[3])
        
@@ -285,15 +285,15 @@ class ModelNet40(Dataset):
         self.partition = partition        
 
     def __getitem__(self, item):
-        pointcloud = self.data[item][:self.num_points]
-        label = self.label[item]
+        pointcloud = self.data[item][:self.num_points]#获取第i个样本的前num_points个点，维度是(num_points, 3)
+        label = self.label[item]#获取第i个样本的标签， (1,)
         if self.partition == 'train':
             pointcloud = translate_pointcloud(pointcloud)
             np.random.shuffle(pointcloud)
         return pointcloud, label
 
     def __len__(self):
-        return self.data.shape[0]
+        return self.data.shape[0]#返回数据集的样本数量
 
 
 class ShapeNetPart(Dataset):

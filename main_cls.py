@@ -31,7 +31,7 @@ from util import cal_loss, IOStream
 import sklearn.metrics as metrics
 from tqdm import tqdm
 
-def _init_():
+def _init_():#目录的创建，备份
     if not os.path.exists('outputs'):
         os.makedirs('outputs')
     if not os.path.exists('outputs/'+args.exp_name):
@@ -45,7 +45,7 @@ def _init_():
 
 def train(args, io):
     train_loader = DataLoader(ModelNet40(partition='train', num_points=args.num_points), num_workers=8,
-                              batch_size=args.batch_size, shuffle=True, drop_last=True)
+                              batch_size=args.batch_size, shuffle=True, drop_last=True)#data.shape = (batch_size, num_points, 3)，label.shape = (batch_size,)4个样本的类别标签
     test_loader = DataLoader(ModelNet40(partition='test', num_points=args.num_points), num_workers=8,
                              batch_size=args.test_batch_size, shuffle=True, drop_last=False)
 
@@ -264,7 +264,7 @@ if __name__ == "__main__":
 
     _init_()
 
-    io = IOStream('outputs/' + args.exp_name + '/run.log')
+    io = IOStream('outputs/' + args.exp_name + '/run.log')#创建日志文件
     io.cprint(str(args))
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
