@@ -59,11 +59,11 @@ def train(args, io):
     else:
         raise Exception("Not implemented")
 
-    print(str(model))
+    print(str(model))#输出结构，便于确认通道数/层数。
 
     model = nn.DataParallel(model)
     print("Let's use", torch.cuda.device_count(), "GPUs!")
-
+#优化器与学习率调度器
     if args.use_sgd:
         print("Use SGD")
         opt = optim.SGD(model.parameters(), lr=args.lr*100, momentum=args.momentum, weight_decay=1e-4)  #momentum为i动量；weight_decay权重衰减，为防止过拟合
@@ -72,7 +72,7 @@ def train(args, io):
         opt = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
 
 
-    try:
+    try:#尝试加载断点（断训续训）
         print("load model*******************************")
         checkpoint = torch.load('outputs/%s/models/best_model.pth' % args.exp_name)
         start_epoch = checkpoint['epoch']
@@ -82,12 +82,13 @@ def train(args, io):
             opt.load_state_dict(checkpoint['optimizer_state_dict'])
     except:
         start_epoch = 0
+    #学习率调度器
     if args.scheduler == 'cos':
         scheduler = CosineAnnealingLR(opt, args.epochs, eta_min=1e-3) #余弦退火学习率，eta_min表示最小学习率
     elif args.scheduler == 'step':
         scheduler = StepLR(opt, step_size=20, gamma=0.7) #等间隔调整学习率，gamma --- 更新lr的乘法因子
     
-    criterion = cal_loss
+    criterion = cal_loss#损失函数与度量
 
     best_test_acc = 0
     for epoch in range(start_epoch+1,args.epochs+1):
@@ -103,7 +104,7 @@ def train(args, io):
 
         for data,label in tqdm(train_loader, total=len(train_loader)):
             data, label = data.to(device), label.to(device).squeeze()
-            data = data.permute(0, 2, 1)
+            data = data.permute(0, 2, 1)# (B, Num_points, 3) -> (B, 3, Numpoints) 符合网络约定
             batch_size = data.size()[0]
             opt.zero_grad()
             torch.isnan(data).all()

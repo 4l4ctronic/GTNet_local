@@ -89,7 +89,7 @@ def load_data_cls(partition):
         all_label.append(label)
     all_data = np.concatenate(all_data, axis=0)
     all_label = np.concatenate(all_label, axis=0)
-    return all_data, all_label
+    return all_data, all_label#返回的维度是(N,num_points,d),(N,)
 
 
 def load_data_partseg(partition):
@@ -100,10 +100,10 @@ def load_data_partseg(partition):
     all_label = []
     all_seg = []
     if partition == 'trainval':
-        file = glob.glob(os.path.join('D:\\datasets\\shapenet_part_seg_hdf5_data', '*train*.h5')) \
-               + glob.glob(os.path.join('D:\\datasets\\shapenet_part_seg_hdf5_data', '*val*.h5'))
+        file = glob.glob(os.path.join('autodl-fs/GTNet_local/data/shapenet_part_seg_hdf5_data', '*train*.h5')) \
+               + glob.glob(os.path.join('autodl-fs/GTNet_local/data/shapenet_part_seg_hdf5_data', '*val*.h5'))
     else:
-        file = glob.glob(os.path.join('D:\\datasets\\shapenet_part_seg_hdf5_data', '*%s*.h5'%partition))
+        file = glob.glob(os.path.join('autodl-fs/GTNet_local/data/shapenet_part_seg_hdf5_data', '*%s*.h5'%partition))
     for h5_name in file:
         f = h5py.File(h5_name, 'r+')
         data = f['data'][:].astype('float32')
@@ -288,7 +288,7 @@ class ModelNet40(Dataset):
         pointcloud = self.data[item][:self.num_points]#获取第i个样本的前num_points个点，维度是(num_points, 3)
         label = self.label[item]#获取第i个样本的标签， (1,)
         if self.partition == 'train':
-            pointcloud = translate_pointcloud(pointcloud)
+            pointcloud = translate_pointcloud(pointcloud)#对点云进行随机的缩放和平移变换：
             np.random.shuffle(pointcloud)
         return pointcloud, label
 
