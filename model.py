@@ -144,7 +144,11 @@ class GTNet_cls(nn.Module):
                           dilation=4, shape_repr="cylinder",
                           use_corr=True, use_residual=True, dropout=0.0)
         # //
-        self.linear1 = nn.Linear(args.emb_dims,512, bias=False)
+
+        self.alpha2 = nn.Parameter(torch.tensor(0.0))
+        self.alpha4 = nn.Parameter(torch.tensor(0.0))
+
+        self.linear1 = nn.Linear(2*args.emb_dims,512, bias=False)
         self.bn6 = nn.BatchNorm1d(512)
         self.dp1 = nn.Dropout(p=args.dropout)
         self.linear2 = nn.Linear(512, 256)
@@ -171,17 +175,22 @@ class GTNet_cls(nn.Module):
         x4 = self.transformer4(x3)[0]
         # 并联分支（第2、4层）
         x2_lr, _ = self.lrgm2(x2, xyz,use_feat_knn=True)        # [B, 64,  N]
-        x4_lr, _ = self.lrgm4(x3, xyz,use_feat_knn=True)        # [B, 256, N]  # 注意：用 x3 作为输入（与第4层同级）
+        x4_lr, _ = self.lrgm4(x3, xyz,use_feat_knn=True)  
+        
+        x2_lr, _ = self.lrgm2(x2, xyz, use_feat_knn=True)
+        x4_lr, _ = self.lrgm4(x3, xyz, use_feat_knn=True)
+        x2_lr = self.alpha2 * x2_lr
+        x4_lr = self.alpha4 * x4_lr      # [B, 256, N]  # 注意：用 x3 作为输入（与第4层同级）
        
         x = torch.cat((x1, x2, x3,x4,x2_lr,x4_lr), dim=1)
         
         x = self.conv5(x)  # (batch_size, 64+64+128+256, num_points) -> (batch_size, emb_dims, num_points)
                     
-        x1 = F.adaptive_max_pool1d(x, 1).view(batch_size,
+        x_max = F.adaptive_max_pool1d(x, 1).view(batch_size,
                                               -1)  # (batch_size, emb_dims, num_points) -> (batch_size, emb_dims)
-        x2 = F.adaptive_avg_pool1d(x, 1).view(batch_size,
+        x_avg = F.adaptive_avg_pool1d(x, 1).view(batch_size,
                                               -1)  # (batch_size, emb_dims, num_points) -> (batch_size, emb_dims)
-        x = x1-x2  # (batch_size, emb_dims*2)
+        x = torch.cat([x_max, x_avg], dim=1)
         x = F.leaky_relu(self.bn6(self.linear1(x)), negative_slope=0.2)
         # x=F.leaky_relu(self.bn7(self.linear2(x)),negative_slope=0.2)
         x=self.dp1(x)
@@ -523,6 +532,8 @@ class LRGM(nn.Module):
         B, C, N = x.shape
         if idx is None:
             anchor = x if use_feat_knn else xyz
+            if use_feat_knn:
+                anchor = F.normalize(anchor, dim=1, eps=1e-6)
             idx = self.build_idx(anchor)           # 用坐标做 KNN
 
 

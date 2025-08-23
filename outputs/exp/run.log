@@ -1,2 +1,0 @@
-Namespace(exp_name='exp', model='GTNet', dataset='modelnet40', batch_size=4, test_batch_size=8, epochs=250, use_sgd=True, lr=1e-05, momentum=0.9, scheduler='cos', no_cuda=False, seed=1, eval=False, num_points=2048, dropout=0.5, emb_dims=1024, k=20, model_path='')
-Using GPU : 0 from 1 devices
