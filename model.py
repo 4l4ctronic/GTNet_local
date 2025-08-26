@@ -111,70 +111,62 @@ class GTNet_cls(nn.Module):
         # self.bn4 = nn.BatchNorm2d(256)
         self.bn5 = nn.BatchNorm1d(args.emb_dims)
         self.transform_net = Transform_Net(args)
-        # self.conv1 = nn.Sequential(nn.Conv1d(1536, 512, kernel_size=1, bias=False),
-        #                            self.bn1,
-        #                            nn.LeakyReLU(negative_slope=0.2))
-        # self.conv2 = nn.Sequential(nn.Conv1d(512, 256, kernel_size=1, bias=False),
-        #                            self.bn2,
-        #                            nn.LeakyReLU(negative_slope=0.2))
-        # self.conv3 = nn.Sequential(nn.Conv1d(256, 256, kernel_size=1, bias=False),
-        #                            self.bn2,
-        #                            nn.LeakyReLU(negative_slope=0.2))
-        # self.conv4 = nn.Sequential(nn.Conv1d(256, 128, kernel_size=1, bias=False),
-        #                            self.bn3,
-        #                            nn.LeakyReLU(negative_slope=0.2))
+
+        self.lrgm1 = LRGM(3,   64,  k=self.k, dilation=1, shape_repr="cylinder",
+                          use_corr=True, use_residual=True)
+        self.lrgm2 = LRGM(64,  64,  k=self.k, dilation=2, shape_repr="cylinder",
+                          use_corr=True, use_residual=True)
+        self.lrgm3 = LRGM(64,  128, k=self.k, dilation=3, shape_repr="cylinder",
+                          use_corr=True, use_residual=True)
+        self.lrgm4 = LRGM(128, 256, k=self.k, dilation=4, shape_repr="cylinder",
+                          use_corr=True, use_residual=True)
+
         self.conv5 = nn.Sequential(nn.Conv1d(512, args.emb_dims, kernel_size=1, bias=False),
                                    self.bn5,
                                    nn.LeakyReLU(negative_slope=0.2))#emb_dims=1024
 
         # add
-        self.transformer1 = GT(3, 64,self.k)
+"""         self.transformer1 = GT(3, 64,self.k)
         self.transformer2 = GT(64, 64,self.k)
         self.transformer3 = GT(64, 128,self.k)
-        self.transformer4 = GT(128, 256,self.k)
+        self.transformer4 = GT(128, 256,self.k) """
         # //
-        self.linear1 = nn.Linear(args.emb_dims,512, bias=False)
+        self.fc1 = nn.Linear(args.emb_dims,512, bias=False)
         self.bn6 = nn.BatchNorm1d(512)
-        self.dp1 = nn.Dropout(p=args.dropout)
-        self.linear2 = nn.Linear(512, 256)
+        self.drop1 = nn.Dropout(p=args.dropout)
+        self.fc2 = nn.Linear(512, 256)
         self.bn7 = nn.BatchNorm1d(256)
-        self.dp2 = nn.Dropout(p=args.dropout)
-        self.linear3 = nn.Linear(512, 256)
-        self.linear4=nn.Linear(256,128)
+        self.drop2 = nn.Dropout(p=args.dropout)
+        self.fc_out=nn.Linear(256,output_channels)
+# --- in GTNet_cls.forward ---
+    def forward(self, x):                  # x: (B,3,N)
+        B, _, N = x.shape
+        xyz = x                            # 用坐标做 IDKNN
+        feat = x                           # 初始特征 C=3
 
-        self.linear5=nn.Linear(256,output_channels)
-        self.bn8=nn.BatchNorm1d(128)
-    def forward(self, x): #输入data(B, 3, Numpoints)
-        batch_size = x.size(0)
+        idx1 = self.lrgm1.build_idx(xyz)
+        f1, _ = self.lrgm1(feat, xyz, idx1)  # (B,64,N)
+        idx2 = self.lrgm2.build_idx(f1)
+        f2, _ = self.lrgm2(f1,   xyz, idx2)  # (B,64,N)
+        idx3 = self.lrgm3.build_idx(f2)
+        f3, _ = self.lrgm3(f2,   xyz, idx3)  # (B,128,N)
+        idx4 = self.lrgm4.build_idx(f3)
+        f4, _ = self.lrgm4(f3,   xyz, idx4)  # (B,256,N)
 
-        num_points=x.size(2)
-       
+        x = torch.cat([f1, f2, f3, f4], dim=1)   # (B,512,N)
+        x = self.conv5(x)                        # (B,emb_dims,N)  emb_dims=1024
 
-        x1 = self.transformer1(x)[0]
-        
-        x2 = self.transformer2(x1)[0]
-        
-        x3 = self.transformer3(x2)[0]
-       
-        x4 = self.transformer4(x3)[0]
-       
-        x = torch.cat((x1, x2, x3,x4), dim=1)
-        
-        x = self.conv5(x)  # (batch_size, 64+64+128+256, num_points) -> (batch_size, emb_dims, num_points)
-                    
-        x1 = F.adaptive_max_pool1d(x, 1).view(batch_size,
-                                              -1)  # (batch_size, emb_dims, num_points) -> (batch_size, emb_dims)
-        x2 = F.adaptive_avg_pool1d(x, 1).view(batch_size,
-                                              -1)  # (batch_size, emb_dims, num_points) -> (batch_size, emb_dims)
-        x = x1-x2  # (batch_size, emb_dims*2)
-        x = F.leaky_relu(self.bn6(self.linear1(x)), negative_slope=0.2)
-        # x=F.leaky_relu(self.bn7(self.linear2(x)),negative_slope=0.2)
-        x=self.dp1(x)
-        x=F.leaky_relu(self.bn7(self.linear3(x)), negative_slope=0.2)
-        # x=F.leaky_relu(self.bn8(self.linear4(x)), negative_slope=0.2)
-        x=self.dp2(x)
-        x=self.linear5(x)
+        x1 = F.adaptive_max_pool1d(x, 1).view(B, -1)  # (B,1024)
+        x2 = F.adaptive_avg_pool1d(x, 1).view(B, -1)  # (B,1024)
+        x  = x1 - x2
+
+        x  = F.leaky_relu(self.bn6(self.fc1(x)), 0.2)
+        x  = self.dp1(x)
+        x  = F.leaky_relu(self.bn7(self.fc2(x)), 0.2)
+        x  = self.dp2(x)
+        x  = self.fc_out(x)                        # (B,num_classes)
         return x
+
 
 
                                   
@@ -493,10 +485,13 @@ class LRGM(nn.Module):
 
         # === LFCM learnable mapping along K ===
         self.wK = nn.Linear(k, k, bias=False) if use_corr else None
+        #wK 初始化为恒等（训练更稳）
+        if self.wK is not None:
+            nn.init.eye_(self.wK.weight)
 
     @torch.no_grad()
-    def build_idx(self, xyz):
-        idx, _ = knn_with_dilation(xyz, self.k, self.dilation)  # xyz: (B,3,N)
+    def build_idx(self, base):
+        idx, _ = knn_with_dilation(base, self.k, self.dilation)  # xyz: (B,3,N)
         return idx
 
     def forward(self, x, xyz, idx=None):
@@ -573,14 +568,15 @@ def  LocalFeatureRepresentaion_polar(xyz,knn_points,return_dis=True):
     # xyz:b,n,3
     # knn_points:b,n,k,3
     b,n,k,_ = knn_points.shape
+    eps=1e-9
     knn_points_norm = knn_points - xyz.unsqueeze(-2) # b,n,k,3 去心之后,相对位置
-    local_dis = torch.sqrt(torch.sum(knn_points_norm **2 ,dim=-1)) # b,n,k
+    local_dis = torch.sqrt(torch.sum(knn_points_norm **2 ,dim=-1)+eps) # b,n,k
     local_x = knn_points_norm[:,:,:,0] # b,n,k
     local_y = knn_points_norm[:,:,:,1]# b,n,k
     local_z = knn_points_norm[:,:,:,2] # b,n,k
-    local_xy = torch.sqrt(local_x ** 2 + local_y ** 2)  # b,n, k
-    local_xz = torch.sqrt(local_x ** 2 + local_z ** 2) # b,n.k
-    local_yz = torch.sqrt(local_y ** 2 + local_z ** 2) # b,n,k
+    local_xy = torch.sqrt(local_x ** 2 + local_y ** 2+eps)  # b,n, k
+    local_xz = torch.sqrt(local_x ** 2 + local_z ** 2+eps) # b,n.k
+    local_yz = torch.sqrt(local_y ** 2 + local_z ** 2+eps) # b,n,k
 
     # center_mass = torch.mean(knn_points_norm,dim=-2)  # b,n,3
     # z_fi_center = torch.atan2(center_mass[:,:,1], center_mass[:,:,0]) # b,n
@@ -636,7 +632,8 @@ def LocalFeatureRepresentaion_cylinder(xyz,knn_points,nsample,dila3 = False):
 
     # knn_points = index_points(xyz,knn_index) # b,n,k,3
     knn_points_norm = knn_points - xyz.unsqueeze(-2) # b,n,k,3 去心之后,相对位置
-    local_dis = torch.sqrt(torch.sum(knn_points_norm **2 ,dim=-1)) # b,n,k
+    eps=1e-9
+    local_dis = torch.sqrt(torch.sum(knn_points_norm **2 ,dim=-1)+eps) # b,n,k
 
     # center_mass = torch.mean(knn_points_norm,dim = -2)# b,n,3
     # z_ceta_center = torch.atan2(center_mass[:,:,1],center_mass[:,:,0]) # b,n
@@ -645,19 +642,19 @@ def LocalFeatureRepresentaion_cylinder(xyz,knn_points,nsample,dila3 = False):
 
     #z_invarient
     z_z = knn_points_norm[:,:,:,2] # b,n,k
-    z_r = torch.sqrt(knn_points_norm[:,:,:,0] ** 2 + knn_points_norm[:,:,:,1] ** 2) # b,n,k
+    z_r = torch.sqrt(knn_points_norm[:,:,:,0] ** 2 + knn_points_norm[:,:,:,1] ** 2+eps) # b,n,k
     z_ceta = torch.atan2(knn_points_norm[:,:,:,1],knn_points_norm[:,:,:,0])
     # z_ceta = z_ceta - z_ceta_center.unsqueeze(-1) # b,n,k
 
     # y-invariant
     y_y = knn_points_norm[:,:,:,1] # b,n,k
-    y_r = torch.sqrt(knn_points_norm[:,:,:,0] ** 2 + knn_points_norm[:,:,:,2] ** 2)
+    y_r = torch.sqrt(knn_points_norm[:,:,:,0] ** 2 + knn_points_norm[:,:,:,2] ** 2+eps)
     y_ceta = torch.atan2(knn_points_norm[:,:,:,0],knn_points_norm[:,:,:,2])
     # y_ceta = y_ceta  - y_ceta_center.unsqueeze(-1) # b,n,k
 
     # x_invariant
     x_x = knn_points_norm[:,:,:,0] # b,n,k
-    x_r = torch.sqrt(knn_points_norm[:,:,:,1] ** 2 + knn_points_norm[:,:,:,2] ** 2)
+    x_r = torch.sqrt(knn_points_norm[:,:,:,1] ** 2 + knn_points_norm[:,:,:,2] ** 2+eps)
     x_ceta = torch.atan2(knn_points_norm[:,:,:,2],knn_points_norm[:,:,:,1])
     # x_ceta = x_ceta - x_ceta_center.unsqueeze(-1)  # b,n,k
     if dila3:

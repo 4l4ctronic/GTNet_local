@@ -1,0 +1,6 @@
+Namespace(exp_name='exp', model='GTNet', dataset='modelnet40', batch_size=4, test_batch_size=8, epochs=250, use_sgd=True, lr=1e-05, momentum=0.9, scheduler='cos', no_cuda=False, seed=1, eval=False, num_points=2048, dropout=0.5, emb_dims=1024, k=20, model_path='')
+Using GPU : 0 from 1 devices
+Train 1, loss: 3.119023, train acc: 0.275508, train avg acc: 0.132386
+Test 1, loss: 2.614619, test acc: 0.395462, test avg acc: 0.270587
+Train 2, loss: 2.691741, train acc: 0.429472, train avg acc: 0.244292
+Test 2, loss: 2.273010, test acc: 0.595624, test avg acc: 0.438099
