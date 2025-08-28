@@ -195,7 +195,7 @@ def test(args, io):
         raise Exception("Not implemented")
 
     model = nn.DataParallel(model)
-    checkpoint = torch.load('outputs/cls_1024/models/best_model.pth' )
+    checkpoint = torch.load('outputs/%s/models/best_model.pth' % args.exp_name)
     model.load_state_dict(checkpoint['model_state_dict'])
     model = model.eval()
     test_acc = 0.0

@@ -75,12 +75,12 @@ def download_S3DIS():
     
 
 def load_data_cls(partition):
-    download_modelnet40()
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    DATA_DIR = BASE_DIR
+    # download_modelnet40()
+    # BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    # DATA_DIR = BASE_DIR
     all_data = []
     all_label = []
-    for h5_name in glob.glob(os.path.join('data/modelnet40_ply_hdf5_2048', '*%s*.h5'%partition)):
+    for h5_name in glob.glob(os.path.join('/autodl-fs/data/Data_point/modelnet40_ply_hdf5_2048/modelnet40_ply_hdf5_2048', '*%s*.h5'%partition)):
         f = h5py.File(h5_name, 'r+')
         data = f['data'][:].astype('float32') 
         label = f['label'][:].astype('int64')
