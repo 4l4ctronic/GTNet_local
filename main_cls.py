@@ -30,6 +30,7 @@ from torch.utils.data import DataLoader
 from util import cal_loss, IOStream
 import sklearn.metrics as metrics
 from tqdm import tqdm
+from CAN import ortho_regularizer
 
 def _init_():#目录的创建，备份
     if not os.path.exists('outputs'):
@@ -46,7 +47,7 @@ def _init_():#目录的创建，备份
 def train(args, io):
     train_loader = DataLoader(ModelNet40(partition='train', num_points=args.num_points), num_workers=8,
                               batch_size=args.batch_size, shuffle=True, drop_last=True)#data.shape = (batch_size, num_points, 3)，label.shape = (batch_size,)4个样本的类别标签
-    test_loader = DataLoader(ModelNet40(partition='test', num_points=args.num_points), num_workers=8,
+    test_loader = DataLoader(ModelNet40(partition='test', num_points=args.num_points,test_sampler=args.test_sampler), num_workers=8,
                              batch_size=args.test_batch_size, shuffle=False, drop_last=False)
 
     device = torch.device("cuda" if args.cuda else "cpu")
@@ -66,7 +67,7 @@ def train(args, io):
 #优化器与学习率调度器
     if args.use_sgd:
         print("Use SGD")
-        opt = optim.SGD(model.parameters(), lr=args.lr*100, momentum=args.momentum, weight_decay=1e-4)  #momentum为i动量；weight_decay权重衰减，为防止过拟合
+        opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=1e-4)  #momentum为i动量；weight_decay权重衰减，为防止过拟合
     else:
         print("Use Adam")
         opt = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
@@ -182,7 +183,7 @@ def train(args, io):
 
 
 def test(args, io):
-    test_loader = DataLoader(ModelNet40(partition='test', num_points=args.num_points),
+    test_loader = DataLoader(ModelNet40(partition='test', num_points=args.num_points,test_sampler=args.test_sampler),
                              batch_size=args.test_batch_size, shuffle=False, drop_last=False)
 
     device = torch.device("cuda" if args.cuda else "cpu")
@@ -224,7 +225,7 @@ def test(args, io):
 if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(description='Point Cloud Recognition')
-    parser.add_argument('--exp_name', type=str, default='new_lrgm', metavar='N',
+    parser.add_argument('--exp_name', type=str, default='CAN_LRGM', metavar='N',
                         help='Name of the experiment')
     parser.add_argument('--model', type=str, default='GTNet', metavar='N',
                         choices=['pointnet', 'GTNet'],
@@ -233,14 +234,14 @@ if __name__ == "__main__":
                         choices=['modelnet40'])
     parser.add_argument('--batch_size', type=int, default=16, metavar='batch_size',
                         help='Size of batch)')
-    parser.add_argument('--test_batch_size', type=int, default=8, metavar='batch_size',
+    parser.add_argument('--test_batch_size', type=int, default=16, metavar='batch_size',
                         help='Size of batch)')
-    parser.add_argument('--epochs', type=int, default=250, metavar='N',
+    parser.add_argument('--epochs', type=int, default=200, metavar='N',
                         help='number of episode to train ')
     parser.add_argument('--use_sgd', type=bool, default=True,
                         help='Use SGD')
-    parser.add_argument('--lr', type=float, default=0.0001, metavar='LR',
-                        help='learning rate (default: 0.001, 0.1 if using sgd)')
+    parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
+                        help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
     parser.add_argument('--scheduler', type=str, default='step', metavar='N',
@@ -263,9 +264,12 @@ if __name__ == "__main__":
     parser.add_argument('--model_path', type=str, default='', metavar='N',
                         help='Pretrained model path')
     # argparse
-    parser.add_argument('--test_sampler', type=str, default='random_fixed',
+    parser.add_argument('--test_sampler', type=str, default='random',
                         choices=['random_fixed', 'fps', 'random'],
                         help='Sampling for eval/test: random_fixed=均匀但可复现；fps=最远点；random=每次都重新随机')
+    parser.add_argument('--t_reg', type=float, default=5e-4,
+                    help='weight of T orthogonality regularizer')
+
 
     args = parser.parse_args()
 

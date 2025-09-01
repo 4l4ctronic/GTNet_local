@@ -78,7 +78,7 @@ def _neg_sqdist_feat(feat):                   # (B,C,N)->(B,N,N)
 class LRGM(nn.Module):
     def __init__(self, in_channels, out_channels, k=16, dilation=1,
                  shape_repr="cylinder", use_corr=True, use_residual=True,
-                 dropout=0.0, act_layer=nn.ReLU, norm="bn",
+                 dropout=0.1, act_layer=nn.ReLU, norm="bn",
                  use_attnpool=True, use_metric_knn=True):
         super().__init__()
         self.k = k

@@ -26,6 +26,7 @@ import torch.nn.functional as F
 from pointnet_util import index_points
 from transformer_divide import TransformerBlock, Attention, GT, SA_Layer,get_graph_feature
 from LRGM import *
+from CAN import *
 
 
 def farthest_point_sample(xyz, npoint):
@@ -132,6 +133,7 @@ class GTNet_cls(nn.Module):
         #self.transformer3 = GT(64, 128,self.k)
         #self.transformer4 = GT(128, 256,self.k)
         # //
+        self.can = CAN_LANIDKNN(k=args.k, dilation=1)  # dilation 
         self.fc1 = nn.Linear(args.emb_dims,512, bias=False)
         self.bn6 = nn.BatchNorm1d(512)
         self.drop1 = nn.Dropout(p=args.dropout)
