@@ -264,11 +264,9 @@ if __name__ == "__main__":
     parser.add_argument('--model_path', type=str, default='', metavar='N',
                         help='Pretrained model path')
     # argparse
-    parser.add_argument('--test_sampler', type=str, default='random',
+    parser.add_argument('--test_sampler', type=str, default='random_fixed',
                         choices=['random_fixed', 'fps', 'random'],
                         help='Sampling for eval/test: random_fixed=均匀但可复现；fps=最远点；random=每次都重新随机')
-    parser.add_argument('--t_reg', type=float, default=5e-4,
-                    help='weight of T orthogonality regularizer')
 
 
     args = parser.parse_args()

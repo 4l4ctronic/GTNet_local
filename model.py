@@ -112,7 +112,6 @@ class GTNet_cls(nn.Module):
         # self.bn3 = nn.BatchNorm1d(128)
         # self.bn4 = nn.BatchNorm2d(256)
         self.bn5 = nn.BatchNorm1d(args.emb_dims)
-        self.transform_net = Transform_Net(args)
 
         self.lrgm1 = LRGM(3,   64,  k=self.k, dilation=1, shape_repr="cylinder",
                           use_corr=True, use_residual=True)
