@@ -77,9 +77,10 @@ def _neg_sqdist_feat(feat):                   # (B,C,N)->(B,N,N)
 # -------------------- LRGM（集成 AttnPool-K + LAN-IDKNN，其它保持一致） --------------------
 class LRGM(nn.Module):
     def __init__(self, in_channels, out_channels, k=16, dilation=1,
-                 shape_repr="cylinder", use_corr=True, use_residual=True,
+                 shape_repr="lprpp", use_corr=True, use_residual=True,
                  dropout=0.1, act_layer=nn.ReLU, norm="bn",
-                 use_attnpool=True, use_metric_knn=True):
+                 use_attnpool=True, use_metric_knn=True,
+                 lprpp_add_shape3=True,lprpp_use_weights=True):
         super().__init__()
         self.k = k
         self.dilation = dilation
@@ -88,9 +89,14 @@ class LRGM(nn.Module):
         self.use_residual = use_residual
         self.use_attnpool = use_attnpool
         self.use_metric_knn = use_metric_knn
-
-        # --- LPR 维度（保持你原来的 13D） ---
-        shape_c = 13
+        self.lprpp_add_shape3 = lprpp_add_shape3
+        self.lprpp_use_weights = lprpp_use_weights
+        
+        # --- LPR 通道数 ---
+        if shape_repr.lower() in ["lprpp", "pca", "lpr++"]:
+            shape_c = 16 if lprpp_add_shape3 else 13
+        else:
+            shape_c = 13
         in_c2d = in_channels + shape_c
 
         # --- 聚合器：AttnPool-K 替换 "共享MLP + MAX" ---
@@ -176,52 +182,64 @@ class LRGM(nn.Module):
         return retidx
 
     def forward(self, x, xyz, idx=None):
-        """
-        x:   (B,C,N)
-        xyz: (B,3,N)
-        idx: (B,N,K)  可选；若 None 且启用 LAN-IDKNN，将在本层内自动建图
-        """
         B, C, N = x.shape
         if idx is None:
-            # 自动建图（LAN-IDKNN 或原 KNN）
             base_for_metric = x if (self.metric_head is not None and self.metric_head.use_feat) else xyz
             idx = self.build_idx(base_for_metric, xyz=xyz)
 
-        # 邻居特征/中心特征
+        # 邻居特征
         x_j = gather_feat_neighbors(x, idx)                 # (B,C,N,K)
         x_i = x.unsqueeze(-1).expand(-1, -1, -1, self.k)    # (B,C,N,K)
         feat_rel = x_j - x_i
 
-        # LPR 13D
-        xyz_bnc, knn_xyz = gather_xyz_neighbors(xyz, idx)   # (B,N,3), (B,N,K,3)
-        if self.shape_repr == "cylinder":
-            lshape = LocalFeatureRepresentaion_cylinder(xyz_bnc, knn_xyz, nsample=self.k)  # (B,N,K,13)
-        else:
-            lshape, _, _ = LocalFeatureRepresentaion_polar(xyz_bnc, knn_xyz, return_dis=True)  # (B,N,K,13)
-        lshape = lshape.permute(0, 3, 1, 2).contiguous()     # (B,13,N,K)
-
-        # LFCM（沿K的相关注意力）
-        if self.use_corr:
+        # =====(A) 若需要把 LFCM 的权重当作 LPR++ 的协方差权重，先算 a =====
+        a = None
+        if self.use_corr and self.lprpp_use_weights:
             xi = F.normalize(x_i, dim=1)
             xj = F.normalize(x_j, dim=1)
-            corr = (xi * xj).sum(1, keepdim=True)           # (B,1,N,K)
-            a = corr.squeeze(1).reshape(B * N, self.k)      # (B*N,K)
+            corr = (xi * xj).sum(1, keepdim=True)                 # (B,1,N,K)
+            a = corr.squeeze(1).reshape(B * N, self.k)            # (B*N,K)
             a = self.wK(a)
-            a = torch.softmax(a, dim=-1).view(B, 1, N, self.k)
-            feat_rel = feat_rel * a + feat_rel              # 与论文式(2)一致
+            a = torch.softmax(a, dim=-1).view(B, 1, N, self.k)    # (B,1,N,K)
 
-        # 聚合（AttnPool-K | 共享MLP+MAX）
-        base = torch.cat([feat_rel, lshape], dim=1)          # (B,C+13,N,K)
-        if self.use_attnpool:
-            f = self.agg(base)                               # (B,Co,N)
+        # 几何邻居
+        xyz_bnc, knn_xyz = gather_xyz_neighbors(xyz, idx)         # (B,N,3),(B,N,K,3)
+
+        # =====(B) LPR / LPR++ =====
+        if self.shape_repr.lower() in ["lprpp", "pca", "lpr++"]:
+            w_for_lpr = None if a is None else a.squeeze(1)       # (B,N,K) or None
+            lshape = LPR_pp(xyz_bnc, knn_xyz,
+                            keep_dim_13=not self.lprpp_add_shape3,
+                            add_shape3=self.lprpp_add_shape3,
+                            weights=w_for_lpr)                    # (B,N,K,13/16)
+        elif self.shape_repr == "cylinder":
+            lshape = LocalFeatureRepresentaion_cylinder(xyz_bnc, knn_xyz, nsample=self.k)   # (B,N,K,13)
         else:
-            f = self.mlp(base)                               # (B,Co,N,K)
-            f = f.max(dim=-1, keepdim=False)[0]              # (B,Co,N)
+            lshape, _, _ = LocalFeatureRepresentaion_polar(xyz_bnc, knn_xyz, return_dis=True)
+        lshape = lshape.permute(0, 3, 1, 2).contiguous()          # (B,shape_c,N,K)
 
-        # 残差
+        # =====(C) LFCM 再作用到特征差（保持你原公式）=====
+        if self.use_corr:
+            if a is None:
+                xi = F.normalize(x_i, dim=1)
+                xj = F.normalize(x_j, dim=1)
+                corr = (xi * xj).sum(1, keepdim=True)
+                a = corr.squeeze(1).reshape(B*N, self.k)
+                a = self.wK(a)
+                a = torch.softmax(a, dim=-1).view(B, 1, N, self.k)
+            feat_rel = feat_rel * a + feat_rel
+
+        # 聚合
+        base = torch.cat([feat_rel, lshape], dim=1)                # (B,C+shape_c,N,K)
+        if self.use_attnpool:
+            f = self.agg(base)                                     # (B,Co,N)
+        else:
+            f = self.mlp(base).max(dim=-1, keepdim=False)[0]
+
         if self.use_residual:
             f = self.act(f + self.shortcut(x))
         return f, idx
+
 
 # -------------------- 你现有的 LPR & dilation-KNN（原样复用） --------------------
 def LocalFeatureRepresentaion_polar(xyz,knn_points,return_dis=True):
@@ -272,6 +290,77 @@ def LocalFeatureRepresentaion_cylinder(xyz,knn_points,nsample,dila3 = False):
                                 x_r.unsqueeze(-1),x_ceta.unsqueeze(-1),
                                 local_dis.unsqueeze(-1),xyz_lift),dim = -1)
     return local_features
+
+def LPR_pp(xyz_bnc, knn_xyz, keep_dim_13=True, add_shape3=False,
+           weights=None, eps=1e-5, stop_grad_evec=False):
+    """
+    xyz_bnc:  (B,N,3)         中心点坐标
+    knn_xyz:  (B,N,K,3)       邻居坐标
+    weights:  (B,N,K) or None 邻域权重（None=均匀；可传 LFCM 的 a.squeeze(1)）
+    return:   (B,N,K,C)  C=13 (默认)；若 add_shape3=True 则 C=16（+线性度/平面度/球度）
+    """
+    B, N, K, _ = knn_xyz.shape
+    device = knn_xyz.device
+
+    # 相对坐标与距离
+    rel  = knn_xyz - xyz_bnc.unsqueeze(2)                       # (B,N,K,3)
+    dist = torch.sqrt((rel**2).sum(-1) + eps)                   # (B,N,K)
+
+    # 加权（默认均匀）
+    w = torch.ones(B, N, K, device=device) if weights is None else weights.clamp_min(0)
+    wsum = w.sum(2, keepdim=True).clamp_min(eps)                # (B,N,1)
+
+    # 去均值
+    mu = (rel * w.unsqueeze(-1)).sum(2, keepdim=True) / wsum.unsqueeze(-1)  # (B,N,1,3)
+    xc = rel - mu                                               # (B,N,K,3)
+
+    # 加权协方差 Σ = (X^T W X)/sum(w) + eps I
+    X   = xc.reshape(B*N, K, 3)
+    wbn = w.reshape(B*N, K, 1)
+    cov = X.transpose(1,2).matmul(X * wbn) / wbn.sum(1, keepdim=True).clamp_min(eps)
+    cov = cov + eps * torch.eye(3, device=device).unsqueeze(0)
+
+    # 特征分解（升序），重排为 λ1>=λ2>=λ3；E 列向量为 e1,e2,e3
+    evals, evecs = torch.linalg.eigh(cov)
+    idx  = torch.tensor([2,1,0], device=device)
+    lam  = evals[:, idx]                                        # (BN,3)
+    E    = evecs[:, :, idx]                                     # (BN,3,3)
+
+    # 方向消歧 + 右手系
+    mu_bn = mu.reshape(B*N, 3)
+    s1    = torch.where((E[:, :, 0] * mu_bn).sum(-1, keepdim=True) < 0,
+                        -torch.ones(B*N,1,device=device), torch.ones(B*N,1,device=device))
+    E[:, :, 0] = E[:, :, 0] * s1
+    sdet  = torch.where(torch.det(E) < 0, -1.0, 1.0).unsqueeze(-1)
+    E[:, :, 2] = E[:, :, 2] * sdet
+    if stop_grad_evec:
+        E = E.detach()
+
+    # 投影到局部主轴坐标系
+    Xc = (X @ E).view(B, N, K, 3)
+    x_, y_, z_ = Xc[...,0], Xc[...,1], Xc[...,2]
+    rz, thetaz = torch.sqrt(x_**2 + y_**2 + eps), torch.atan2(y_, x_)
+    ry, thetay = torch.sqrt(x_**2 + z_**2 + eps), torch.atan2(x_, z_)
+    rx, thetax = torch.sqrt(y_**2 + z_**2 + eps), torch.atan2(z_, y_)
+
+    # 13D 与原接口一致：[z_, y_, x_, rz, θz, ry, θy, rx, θx, ||Δp||, xyz_lift(3)]
+    xyz_lift = xyz_bnc.unsqueeze(2).expand(-1, -1, K, -1)
+    feat13 = torch.stack([z_, y_, x_, rz, thetaz, ry, thetay, rx, thetax, dist], dim=-1)
+    feat13 = torch.cat([feat13, xyz_lift], dim=-1)              # (B,N,K,13)
+
+    if keep_dim_13 and not add_shape3:
+        return feat13
+
+    # +3D 形状性状（线性度/平面度/球度）
+    lam  = lam.view(B, N, 3)
+    lam1 = lam[...,0].clamp_min(eps); lam2 = lam[...,1]; lam3 = lam[...,2]
+    L = (lam1 - lam2) / lam1
+    P = (lam2 - lam3) / lam1
+    S = lam3 / lam1
+    shape3 = torch.stack([L,P,S], dim=-1).unsqueeze(2).expand(-1,-1,K,-1)   # (B,N,K,3)
+
+    return torch.cat([feat13, shape3], dim=-1)                 # (B,N,K,16)
+
 
 def knn_with_dilation(x, k, d):
     inner = -2 * torch.matmul(x.transpose(2, 1), x)  # b,n,n
