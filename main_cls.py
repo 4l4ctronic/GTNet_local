@@ -224,7 +224,7 @@ def test(args, io):
 if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(description='Point Cloud Recognition')
-    parser.add_argument('--exp_name', type=str, default='LPR++', metavar='N',
+    parser.add_argument('--exp_name', type=str, default='LIDKNN_attnpoolk_best', metavar='N',
                         help='Name of the experiment')
     parser.add_argument('--model', type=str, default='GTNet', metavar='N',
                         choices=['pointnet', 'GTNet'],
