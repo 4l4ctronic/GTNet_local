@@ -25,7 +25,7 @@ import torch.nn.functional as F
 
 from pointnet_util import index_points
 from transformer_divide import TransformerBlock, Attention, GT, SA_Layer,get_graph_feature
-from LRGM import *
+from LRGM_finally import *
 
 
 

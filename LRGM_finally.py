@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
+
 
 # -------------------- helpers (保持你项目里的签名不变) --------------------
 def index_points(points, idx, cuda=False, is_group=False):
@@ -26,7 +28,7 @@ def gather_xyz_neighbors(xyz, idx):
 
 # -------------------- AttnPool-K：替换 MAX 的轻量注意力聚合 --------------------
 class AttnPoolK(nn.Module):
-    def __init__(self, in_c, out_c, dropout=0.0, norm="bn"):
+    def __init__(self, in_c, out_c, dropout=0.1, norm="bn"):
         super().__init__()
         self.phi = nn.Sequential(
             nn.Conv2d(in_c, out_c, 1, bias=False),
@@ -79,7 +81,7 @@ class LRGM(nn.Module):
     def __init__(self, in_channels, out_channels, k=16, dilation=1,
                  shape_repr="cylinder", use_corr=True, use_residual=True,
                  dropout=0.1, act_layer=nn.ReLU, norm="bn",
-                 use_attnpool=True, use_metric_knn=True):
+                 use_attnpool=True, use_metric_knn=True,use_repsurf = True):
         super().__init__()
         self.k = k
         self.dilation = dilation
@@ -88,10 +90,16 @@ class LRGM(nn.Module):
         self.use_residual = use_residual
         self.use_attnpool = use_attnpool
         self.use_metric_knn = use_metric_knn
+        self.use_repsurf=use_repsurf
+
+        surf_c = 10  # 用了 p 项就是 10，否则 9
 
         # --- LPR 维度（保持你原来的 13D） ---
         shape_c = 13
         in_c2d = in_channels + shape_c
+        #RepSurf 分支
+        if self.use_repsurf:
+            self.surf_pool = AttnPoolK(surf_c, out_channels, dropout, norm)
 
         # --- 聚合器：AttnPool-K 替换 "共享MLP + MAX" ---
         if use_attnpool:
@@ -191,6 +199,30 @@ class LRGM(nn.Module):
         x_j = gather_feat_neighbors(x, idx)                 # (B,C,N,K)
         x_i = x.unsqueeze(-1).expand(-1, -1, -1, self.k)    # (B,C,N,K)
         feat_rel = x_j - x_i
+        #RepSurf分支
+        if self.use_repsurf:
+            # 复用主分支的 idx 构造雨伞三角片（无需二次 KNN）
+            xyz_bnc = xyz.transpose(1, 2)  # (B,N,3)
+            umb = group_by_umbrella_from_idx(xyz_bnc, idx, drop_self=True)  # (B,N,K-1,3,3)
+
+            # 法向 / 中心 / 极坐标 / p
+            g_nor = cal_normal(umb, random_inv=self.training, is_group=True)    # (B,N,K-1,3)
+            g_ctr = cal_center(umb)                                             # (B,N,K-1,3)
+            g_pol = xyz2sphere(g_ctr)                                           # (B,N,K-1,3)
+            g_pos = cal_const(g_nor, g_ctr)                                     # (B,N,K-1,1)
+
+            # 数值稳定（可选，但推荐）
+            g_nor = torch.where(torch.isfinite(g_nor), g_nor, torch.zeros_like(g_nor))
+            g_ctr = torch.where(torch.isfinite(g_ctr), g_ctr, torch.zeros_like(g_ctr))
+            g_pol = torch.where(torch.isfinite(g_pol), g_pol, torch.zeros_like(g_pol))
+            g_pos = torch.where(torch.isfinite(g_pos), g_pos, torch.zeros_like(g_pos))
+
+            # 拼接 & 聚合到 (B,Co,N)
+            g_feat = torch.cat([g_ctr, g_pol, g_nor, g_pos], dim=-1)            # (B,N,K-1,10)
+            g_feat = g_feat.permute(0, 3, 1, 2).contiguous()                    # (B,10,N,K-1)
+            f_surf = self.surf_pool(g_feat)                                     # (B,Co,N)
+
+
 
         # LPR 13D
         xyz_bnc, knn_xyz = gather_xyz_neighbors(xyz, idx)   # (B,N,3), (B,N,K,3)
@@ -217,6 +249,10 @@ class LRGM(nn.Module):
         else:
             f = self.mlp(base)                               # (B,Co,N,K)
             f = f.max(dim=-1, keepdim=False)[0]              # (B,Co,N)
+        
+        # 3) 与主干融合（f 是你主干已有输出）
+        if self.use_repsurf:
+            f = f + f_surf
 
         # 残差
         if self.use_residual:
@@ -298,5 +334,154 @@ def knn_with_dilation(x, k, d):
                             idxall[:, :, 6 * w + 3: w * 10:4],
                             idxall[:, :, 10 * w + 4:5 * (k - 4 * w) + 10 * w + 1:5]), dim=-1)
     return retidx, feature_distance
+
+def group_by_umbrella(xyz, new_xyz, k=9, cuda=False):
+    """
+    Group a set of points into umbrella surfaces
+
+    """
+    idx = query_knn_point(k, xyz, new_xyz, cuda=cuda)
+    torch.cuda.empty_cache()
+    group_xyz = index_points(xyz, idx, cuda=cuda, is_group=True)[:, :, 1:]  # [B, N', K-1, 3]
+    torch.cuda.empty_cache()
+
+    group_xyz_norm = group_xyz - new_xyz.unsqueeze(-2)
+    group_phi = xyz2sphere(group_xyz_norm)[..., 2]  # [B, N', K-1]
+    sort_idx = group_phi.argsort(dim=-1)  # [B, N', K-1]
+
+    # [B, N', K-1, 1, 3]
+    sorted_group_xyz = resort_points(group_xyz_norm, sort_idx).unsqueeze(-2)
+    sorted_group_xyz_roll = torch.roll(sorted_group_xyz, -1, dims=-3)
+    group_centriod = torch.zeros_like(sorted_group_xyz)
+    umbrella_group_xyz = torch.cat([group_centriod, sorted_group_xyz, sorted_group_xyz_roll], dim=-2)
+
+    return umbrella_group_xyz
+
+def cal_normal(group_xyz, random_inv=False, is_group=False):
+    """
+    Calculate Normal Vector (Unit Form + First Term Positive)
+
+    :param group_xyz: [B, N, K=3, 3] / [B, N, G, K=3, 3]
+    :param random_inv:
+    :param return_intersect:
+    :param return_const:
+    :return: [B, N, 3]
+    """
+    edge_vec1 = group_xyz[..., 1, :] - group_xyz[..., 0, :]  # [B, N, 3]
+    edge_vec2 = group_xyz[..., 2, :] - group_xyz[..., 0, :]  # [B, N, 3]
+
+    nor = torch.cross(edge_vec1, edge_vec2, dim=-1)
+    den = torch.norm(nor, dim=-1, keepdim=True).clamp_min(1e-8)
+    unit_nor = nor / den# [B, N, 3] / [B, N, G, 3]
+    if not is_group:
+        pos_mask = (unit_nor[..., 0] > 0).float() * 2. - 1.  # keep x_n positive
+    else:
+        pos_mask = (unit_nor[..., 0:1, 0] > 0).float() * 2. - 1.
+    unit_nor = unit_nor * pos_mask.unsqueeze(-1)
+
+    # batch-wise random inverse normal vector (prob: 0.5)
+    if random_inv:
+        random_mask = torch.randint(0, 2, (group_xyz.size(0), 1, 1)).float() * 2. - 1.
+        random_mask = random_mask.to(unit_nor.device)
+        if not is_group:
+            unit_nor = unit_nor * random_mask
+        else:
+            unit_nor = unit_nor * random_mask.unsqueeze(-1)
+
+    return unit_nor
+
+def cal_center(group_xyz):
+    """
+    Calculate Global Coordinates of the Center of Triangle
+
+    :param group_xyz: [B, N, K, 3] / [B, N, G, K, 3]; K >= 3
+    :return: [B, N, 3] / [B, N, G, 3]
+    """
+    center = torch.mean(group_xyz, dim=-2)
+    return center
+
+def xyz2sphere(xyz, normalize=True):
+    """
+    Convert XYZ to Spherical Coordinate
+
+    reference: https://en.wikipedia.org/wiki/Spherical_coordinate_system
+
+    :param xyz: [B, N, 3] / [B, N, G, 3]
+    :return: (rho, theta, phi) [B, N, 3] / [B, N, G, 3]
+    """
+    rho = torch.sqrt(torch.sum(torch.pow(xyz, 2), dim=-1, keepdim=True))
+    rho = torch.clamp(rho, min=0)  # range: [0, inf]
+    ratio = (xyz[..., 2, None] / rho.clamp_min(1e-8)).clamp(-1 + 1e-6, 1 - 1e-6)
+    theta = torch.acos(ratio)
+    phi = torch.atan2(xyz[..., 1, None], xyz[..., 0, None])  # range: [-pi, pi]
+    # check nan
+    idx = rho == 0
+    theta[idx] = 0
+
+    if normalize:
+        theta = theta / np.pi  # [0, 1]
+        phi = phi / (2 * np.pi) + .5  # [0, 1]
+    out = torch.cat([rho, theta, phi], dim=-1)
+    return out
+
+def cal_const(normal, center, is_normalize=True):
+    """
+    Calculate Constant Term (Standard Version, with x_normal to be 1)
+
+    math::
+        const = x_nor * x_0 + y_nor * y_0 + z_nor * z_0
+
+    :param is_normalize:
+    :param normal: [B, N, 3] / [B, N, G, 3]
+    :param center: [B, N, 3] / [B, N, G, 3]
+    :return: [B, N, 1] / [B, N, G, 1]
+    """
+    const = torch.sum(normal * center, dim=-1, keepdim=True)
+    factor = torch.sqrt(torch.Tensor([3])).to(normal.device)
+    const = const / factor if is_normalize else const
+
+    return const
+
+def group_by_umbrella_from_idx(xyz_bnc, idx, drop_self=True):
+    """
+    使用主分支的 idx 构造雨伞三角片
+    xyz_bnc: (B,N,3)
+    idx:     (B,N,K)
+    return:  umbrellas [B, N, K-1, 3(points), 3(coord)]
+             points 顺序依次为 [center(0,0,0), p_i, p_{i+1}]
+    """
+    B, N, _ = xyz_bnc.shape
+    K = idx.shape[-1]
+
+    # 取出 K 个邻居坐标
+    nbrs = index_points(xyz_bnc, idx)               # (B,N,K,3)
+
+    # 去掉自环：你的 knn_with_dilation / topk 产生的 idx 通常首列是自身
+    if drop_self:
+        nbrs = nbrs[:, :, 1:, :]                    # (B,N,K-1,3)
+    else:
+        nbrs = nbrs[:, :, :K-1, :]
+
+    # 相对中心坐标（中心点 -> 原点）
+    rel = nbrs - xyz_bnc.unsqueeze(2)               # (B,N,K-1,3)
+
+    # 以极角 phi 排序
+    phi = xyz2sphere(rel)[..., 2]                   # (B,N,K-1) in [0,1]
+    sort_idx = phi.argsort(dim=-1)                  # (B,N,K-1)
+    # 按 K-1 维重排
+    sorted_rel = torch.gather(
+        rel, 2, sort_idx.unsqueeze(-1).expand(-1, -1, -1, 3)
+    )                                               # (B,N,K-1,3)
+
+    # 组三角片：[center(0), p_i, p_{i+1}]
+    tri_pi   = sorted_rel.unsqueeze(-2)             # (B,N,K-1,1,3)
+    tri_pip1 = torch.roll(tri_pi, shifts=-1, dims=2)# (B,N,K-1,1,3)
+    tri_ctr  = torch.zeros_like(tri_pi)             # (B,N,K-1,1,3)
+
+    umbrellas = torch.cat([tri_ctr, tri_pi, tri_pip1], dim=-2)  # (B,N,K-1,3,3)
+    return umbrellas
+
+
+
 
 
