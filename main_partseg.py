@@ -473,7 +473,7 @@ def test(args, io):
 if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(description='Point Cloud Part Segmentation')
-    parser.add_argument('--exp_name', type=str, default='part1', metavar='N',
+    parser.add_argument('--exp_name', type=str, default='LLRGM_seg', metavar='N',
                         help='Name of the experiment')
     parser.add_argument('--model', type=str, default='GTNet', metavar='N',
                         choices=['GTNet'],
