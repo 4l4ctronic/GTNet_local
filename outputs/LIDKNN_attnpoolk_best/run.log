@@ -600,3 +600,6 @@ Train 299, loss: 0.865824, train acc: 0.968801, train avg acc: 0.954685
 Test 299, loss: 0.929651, test acc: 0.925041, test avg acc: 0.889872
 Train 300, loss: 0.867078, train acc: 0.969614, train avg acc: 0.954195
 Test 300, loss: 0.929781, test acc: 0.920989, test avg acc: 0.885203
+Namespace(exp_name='LIDKNN_attnpoolk_best', model='GTNet', dataset='modelnet40', batch_size=16, test_batch_size=16, epochs=300, use_sgd=True, lr=0.01, momentum=0.9, scheduler='step', no_cuda=False, seed=1, eval=True, num_points=1024, dropout=0.5, emb_dims=1024, k=20, model_path='', test_sampler='random_fixed')
+Using GPU : 0 from 1 devices
+Test :: test acc: 0.928687, test avg acc: 0.893198

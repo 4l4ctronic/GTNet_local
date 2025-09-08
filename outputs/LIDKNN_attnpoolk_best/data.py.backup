@@ -118,9 +118,9 @@ def load_data_partseg(partition):
         label = f['label'][:].astype('int64')
         seg = f['pid'][:].astype('int64')
         f.close()
-        all_data.append(data)
-        all_label.append(label)
-        all_seg.append(seg)
+        all_data.append(data)#点云坐标(S,N,C)
+        all_label.append(label)#物体的大类标签(0,...15)
+        all_seg.append(seg)#逐点的部件标签（0，。。。。49）
     all_data = np.concatenate(all_data, axis=0)
     all_label = np.concatenate(all_label, axis=0)
     all_seg = np.concatenate(all_seg, axis=0)
@@ -179,10 +179,10 @@ def load_data_semseg(partition, test_area):
     return all_data, all_seg
 
 
-def load_color_partseg():
+def load_color_partseg():#绘制50个部件的颜色块和标签
     colors = []
     labels = []
-    f = open("prepare_data\\meta\\partseg_colors.txt")
+    f = open("/autodl-fs/data/GTNet_local/prepare_data/meta/partseg_colors.txt")
     for line in json.load(f):
         colors.append(line['color'])
         labels.append(line['label'])
@@ -214,7 +214,7 @@ def load_color_partseg():
             color_index = color_index + 1
             label_index = label_index + 1
             if color_index >= 50:
-                cv2.imwrite("prepare_data\\meta\\partseg_colors.png", img, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+                cv2.imwrite("/autodl-fs/data/GTNet_local/prepare_data/meta/partseg_colors.png", img, [cv2.IMWRITE_PNG_COMPRESSION, 0])
                 return np.array(colors)
             elif (column + 1 >= column_numbers[row]):
                 break
@@ -325,12 +325,12 @@ class ModelNet40(Dataset):
 
 class ShapeNetPart(Dataset):
     def __init__(self, num_points, partition='train', class_choice=None):
-        self.data, self.label, self.seg = load_data_partseg(partition)
+        self.data, self.label, self.seg = load_data_partseg(partition)#点云坐标(B,N,C)，物体的大类标签(B,1)取值(0,...15)，逐点的部件标签(B,N)取值（0，。。。。49）
         self.cat2id = {'airplane': 0, 'bag': 1, 'cap': 2, 'car': 3, 'chair': 4, 
                        'earphone': 5, 'guitar': 6, 'knife': 7, 'lamp': 8, 'laptop': 9, 
-                       'motor': 10, 'mug': 11, 'pistol': 12, 'rocket': 13, 'skateboard': 14, 'table': 15}
-        self.seg_num = [4, 2, 2, 4, 4, 3, 3, 2, 4, 2, 6, 2, 3, 3, 3, 3]
-        self.index_start = [0, 4, 6, 8, 12, 16, 19, 22, 24, 28, 30, 36, 38, 41, 44, 47]
+                       'motor': 10, 'mug': 11, 'pistol': 12, 'rocket': 13, 'skateboard': 14, 'table': 15}#定义类别名到ID的映射
+        self.seg_num = [4, 2, 2, 4, 4, 3, 3, 2, 4, 2, 6, 2, 3, 3, 3, 3]#每个大类的部件数
+        self.index_start = [0, 4, 6, 8, 12, 16, 19, 22, 24, 28, 30, 36, 38, 41, 44, 47]#该大类在全局50部件标签里的起始索引
         self.num_points = num_points
         self.partition = partition        
         self.class_choice = class_choice
@@ -339,21 +339,21 @@ class ShapeNetPart(Dataset):
         if self.class_choice != None:
             id_choice = self.cat2id[self.class_choice]
             indices = (self.label == id_choice).squeeze()
-            self.data = self.data[indices]
+            self.data = self.data[indices]# 只保留指定类别的数据
             self.label = self.label[indices]
             self.seg = self.seg[indices]
-            self.seg_num_all = self.seg_num[id_choice]
-            self.seg_start_index = self.index_start[id_choice]
+            self.seg_num_all = self.seg_num[id_choice]#该类别的部件数
+            self.seg_start_index = self.index_start[id_choice]#该类别的起始索引
         else:
             self.seg_num_all = 50 #seg_num_all表示类别数量，不选择类型，则为，选中类型，则为类型数量
             self.seg_start_index = 0 #seg_start_index表示其实索引值
             
       
     def __getitem__(self, item):
-        pointcloud = self.data[item][:self.num_points]
-        label = self.label[item]
-        seg = self.seg[item][:self.num_points]
-        if self.partition == 'trainval':
+        pointcloud = self.data[item][:self.num_points]#单个点云的坐标(num_points, 3)
+        label = self.label[item]#该点云的类别ID
+        seg = self.seg[item][:self.num_points]#该点云中每个点的部件标签(num_points,)
+        if self.partition == 'trainval':#随机打乱点云中点的顺序
             # pointcloud = translate_pointcloud(pointcloud)
             indices = list(range(pointcloud.shape[0]))
             np.random.shuffle(indices)
