@@ -1,0 +1,19 @@
+Namespace(exp_name='LLRGM_seg', model='GTNet', dataset='shapenetpart', class_choice=None, batch_size=13, test_batch_size=13, epochs=250, use_sgd=True, lr=0.001, momentum=0.9, scheduler='cos', no_cuda=False, seed=100, eval=False, num_points=2048, dropout=0.5, emb_dims=512, k=20, model_path='', visu='all', visu_format='ply')
+Using GPU : 0 from 1 devices
+Train 1, loss: 1.143617, train acc: 0.867529, train avg acc: 0.506080, train iou: 0.714752
+Test 1, loss: 0.973195, test acc: 0.905074, test avg acc: 0.617663, test iou: 0.749433
+Train 2, loss: 0.974193, train acc: 0.915290, train avg acc: 0.645291, train iou: 0.775357
+Test 2, loss: 0.952340, test acc: 0.908811, test avg acc: 0.660573, test iou: 0.784147
+Train 3, loss: 0.946161, train acc: 0.921426, train avg acc: 0.674787, train iou: 0.789210
+Test 3, loss: 0.936529, test acc: 0.915798, test avg acc: 0.697686, test iou: 0.788824
+Train 4, loss: 0.934001, train acc: 0.924935, train avg acc: 0.694359, train iou: 0.798614
+Test 4, loss: 0.926968, test acc: 0.917019, test avg acc: 0.724492, test iou: 0.793769
+Train 5, loss: 0.922926, train acc: 0.927643, train avg acc: 0.708053, train iou: 0.805710
+Test 5, loss: 0.913415, test acc: 0.923385, test avg acc: 0.710004, test iou: 0.805838
+Train 6, loss: 0.918636, train acc: 0.929263, train avg acc: 0.718980, train iou: 0.809622
+Test 6, loss: 0.955578, test acc: 0.906093, test avg acc: 0.675982, test iou: 0.793957
+Train 7, loss: 0.914965, train acc: 0.929832, train avg acc: 0.725254, train iou: 0.812680
+Test 7, loss: 0.909093, test acc: 0.922523, test avg acc: 0.752050, test iou: 0.803527
+Train 8, loss: 0.910576, train acc: 0.930838, train avg acc: 0.731098, train iou: 0.814661
+Test 8, loss: 0.890077, test acc: 0.930586, test avg acc: 0.746227, test iou: 0.819201
+Train 9, loss: 0.907873, train acc: 0.931797, train avg acc: 0.736827, train iou: 0.816635
