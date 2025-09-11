@@ -160,7 +160,7 @@ def train(args, io):
         drop_last = True
     train_loader = DataLoader(train_dataset, num_workers=12, batch_size=args.batch_size, shuffle=True, drop_last=drop_last)
     test_loader = DataLoader(ShapeNetPart(partition='test', num_points=args.num_points, class_choice=args.class_choice), 
-                            num_workers=12, batch_size=args.test_batch_size, shuffle=True, drop_last=False)
+                            num_workers=12, batch_size=args.test_batch_size, shuffle=False, drop_last=False)
     
     device = torch.device("cuda" if args.cuda else "cpu")
 
@@ -382,7 +382,7 @@ def test(args, io):
         raise Exception("Not implemented")
 
     model = nn.DataParallel(model)
-    checkpoint = torch.load('/autodl-fs/data/GTNet_local/outputs/LLRGM_seg/models/best_model.pth')
+    checkpoint = torch.load('/autodl-fs/data/GTNet_local/outputs/%s/models/best_model.pth' % args.exp_name)
     
     model.load_state_dict(checkpoint['model_state_dict'])
     # for k,v in model.load_state_dict(checkpoint['model_state_dict']).items():
