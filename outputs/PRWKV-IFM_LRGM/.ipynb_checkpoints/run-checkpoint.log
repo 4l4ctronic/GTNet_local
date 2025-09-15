@@ -1,0 +1,28 @@
+Namespace(exp_name='PRWKV-IFM_LRGM', model='GTNet', dataset='shapenetpart', class_choice=None, batch_size=16, test_batch_size=16, epochs=300, use_sgd=True, lr=0.001, momentum=0.9, scheduler='cos', no_cuda=False, seed=100, eval=False, num_points=2048, dropout=0.5, emb_dims=512, k=20, model_path='', visu='all', visu_format='ply')
+Using GPU : 0 from 1 devices
+Train 1, loss: 1.157846, train acc: 0.861202, train avg acc: 0.508544, train iou: 0.711619
+Test 1, loss: 0.959073, test acc: 0.912857, test avg acc: 0.663486, test iou: 0.774953
+Train 2, loss: 0.968075, train acc: 0.915978, train avg acc: 0.654472, train iou: 0.780114
+Test 2, loss: 0.924462, test acc: 0.920896, test avg acc: 0.695186, test iou: 0.791325
+Train 3, loss: 0.937026, train acc: 0.923729, train avg acc: 0.686948, train iou: 0.797785
+Test 3, loss: 0.935683, test acc: 0.915438, test avg acc: 0.718734, test iou: 0.789232
+Train 4, loss: 0.923906, train acc: 0.927473, train avg acc: 0.703866, train iou: 0.806127
+Test 4, loss: 0.911474, test acc: 0.925177, test avg acc: 0.744954, test iou: 0.807252
+Train 5, loss: 0.914837, train acc: 0.929710, train avg acc: 0.715961, train iou: 0.813189
+Test 5, loss: 0.906075, test acc: 0.923517, test avg acc: 0.720361, test iou: 0.808982
+Train 6, loss: 0.908430, train acc: 0.931488, train avg acc: 0.726262, train iou: 0.816929
+Test 6, loss: 0.903718, test acc: 0.926004, test avg acc: 0.719475, test iou: 0.804502
+Train 7, loss: 0.902685, train acc: 0.932888, train avg acc: 0.731220, train iou: 0.819802
+Test 7, loss: 0.895415, test acc: 0.927548, test avg acc: 0.768499, test iou: 0.808858
+Train 8, loss: 0.902311, train acc: 0.932940, train avg acc: 0.737114, train iou: 0.820237
+Test 8, loss: 0.894004, test acc: 0.929496, test avg acc: 0.739809, test iou: 0.812589
+Train 9, loss: 0.900984, train acc: 0.933631, train avg acc: 0.742602, train iou: 0.822319
+Test 9, loss: 0.893167, test acc: 0.930893, test avg acc: 0.740107, test iou: 0.818452
+Train 10, loss: 0.896135, train acc: 0.934951, train avg acc: 0.746056, train iou: 0.825575
+Test 10, loss: 0.898340, test acc: 0.927824, test avg acc: 0.755529, test iou: 0.815854
+Train 11, loss: 0.894968, train acc: 0.934763, train avg acc: 0.749730, train iou: 0.825698
+Test 11, loss: 0.899685, test acc: 0.927037, test avg acc: 0.751315, test iou: 0.812888
+Train 12, loss: 0.894302, train acc: 0.934930, train avg acc: 0.749160, train iou: 0.824683
+Test 12, loss: 0.905392, test acc: 0.925489, test avg acc: 0.723040, test iou: 0.812163
+Train 13, loss: 0.893105, train acc: 0.935504, train avg acc: 0.755829, train iou: 0.826380
+Test 13, loss: 0.886255, test acc: 0.932593, test avg acc: 0.791066, test iou: 0.824058

@@ -382,7 +382,7 @@ def test(args, io):
         raise Exception("Not implemented")
 
     model = nn.DataParallel(model)
-    checkpoint = torch.load('/autodl-fs/data/GTNet_local/outputs/%s/models/best_model.pth' % args.exp_name)
+    checkpoint = torch.load('/autodl-fs/data/GTNet_local/outputs/PRWKV-IFM_LRGM/models/best_model.pth')
     
     model.load_state_dict(checkpoint['model_state_dict'])
     # for k,v in model.load_state_dict(checkpoint['model_state_dict']).items():
@@ -473,7 +473,7 @@ def test(args, io):
 if __name__ == "__main__":
     # Training settings
     parser = argparse.ArgumentParser(description='Point Cloud Part Segmentation')
-    parser.add_argument('--exp_name', type=str, default='LLRGM_seg', metavar='N',
+    parser.add_argument('--exp_name', type=str, default='PRWKV-IFM_LRGM', metavar='N',
                         help='Name of the experiment')
     parser.add_argument('--model', type=str, default='GTNet', metavar='N',
                         choices=['GTNet'],
@@ -484,11 +484,11 @@ if __name__ == "__main__":
                         choices=['airplane', 'bag', 'cap', 'car', 'chair',
                                  'earphone', 'guitar', 'knife', 'lamp', 'laptop', 
                                  'motor', 'mug', 'pistol', 'rocket', 'skateboard', 'table'])
-    parser.add_argument('--batch_size', type=int, default=13, metavar='batch_size',
+    parser.add_argument('--batch_size', type=int, default=16, metavar='batch_size',
                         help='Size of batch)')
-    parser.add_argument('--test_batch_size', type=int, default=13, metavar='batch_size',
+    parser.add_argument('--test_batch_size', type=int, default=16, metavar='batch_size',
                         help='Size of batch)')
-    parser.add_argument('--epochs', type=int, default=250, metavar='N',
+    parser.add_argument('--epochs', type=int, default=300, metavar='N',
                         help='number of episode to train ')
     parser.add_argument('--use_sgd', type=bool, default=True,
                         help='Use SGD')
